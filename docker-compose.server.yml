@@ -1,0 +1,101 @@
+# ======================================================================
+# "Deixar no ar" SEM CI/CD — builda do código e sobe tudo no servidor.
+#
+#   docker compose -f docker-compose.server.yml up -d --build
+#
+# Acesse em  http://IP_DO_SERVIDOR   (ou https://seu-dominio, se definir DOMAIN).
+# Postgres e Kafka ficam só na rede interna; só o Caddy (web) é público.
+# ======================================================================
+
+x-app: &app
+  build: .
+  environment:
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    POSTGRES_DSN: postgresql://wc2026:wc2026@postgres:5432/wc2026
+    INGESTION_SOURCE: simulator
+    SIM_MODE: manual
+    MONTE_CARLO_RUNS: "10000"
+  depends_on:
+    kafka: { condition: service_healthy }
+    postgres: { condition: service_healthy }
+  restart: unless-stopped
+
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:29092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: wc2026
+      POSTGRES_PASSWORD: wc2026
+      POSTGRES_DB: wc2026
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wc2026 -d wc2026"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  ingestion:
+    <<: *app
+    command: python -m wc2026.ingestion.service
+
+  eventstore-writer:
+    <<: *app
+    command: python -m wc2026.processing.eventstore_consumer
+
+  projector:
+    <<: *app
+    command: python -m wc2026.processing.projectors
+
+  api:
+    <<: *app
+    command: uvicorn wc2026.api.app:app --host 0.0.0.0 --port 8000
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-:80}      # IP por padrão (HTTP); defina DOMAIN p/ HTTPS
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  kafka_data:
+  caddy_data:
+  caddy_config:
