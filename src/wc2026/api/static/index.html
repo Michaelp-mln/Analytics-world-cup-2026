@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Copa 2026 · Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#141a2e; --panel2:#1b2340; --line:#27304f;
+    --txt:#e8ecf6; --muted:#93a0c0; --accent:#36d399; --accent2:#5b8cff;
+    --warn:#fbbd23; --danger:#f87272; --gold:#ffd45b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;
+       background:linear-gradient(160deg,#0b1020,#0e1530);color:var(--txt)}
+  header{padding:18px 26px;border-bottom:1px solid var(--line);
+         display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  h1{font-size:20px;margin:0;letter-spacing:.3px}
+  h1 span{color:var(--accent)}
+  .badges{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+  .on{background:var(--accent)} .off{background:var(--danger)}
+  main{padding:22px;max-width:1500px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .kpi .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .kpi .value{font-size:28px;font-weight:700;margin-top:6px}
+  .kpi .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card h2{font-size:14px;margin:0 0 14px;color:var(--txt);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  .col-4{grid-column:span 4} .col-6{grid-column:span 6}
+  .col-8{grid-column:span 8} .col-12{grid-column:span 12}
+  @media(max-width:1000px){.col-4,.col-6,.col-8{grid-column:span 12}}
+  canvas{max-height:300px}
+  .feed{height:300px;overflow-y:auto;font-size:13px}
+  .feed li{list-style:none;padding:7px 9px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:baseline}
+  .feed ul{margin:0;padding:0}
+  .tag{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--panel2);color:var(--muted);white-space:nowrap}
+  .tag.goal{background:rgba(54,211,153,.16);color:var(--accent)}
+  .tag.card{background:rgba(251,189,35,.16);color:var(--warn)}
+  .tag.ft{background:rgba(91,140,255,.16);color:var(--accent2)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:6px 8px;text-align:center;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10.5px}
+  td.name,th.name{text-align:left}
+  .groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .gcard{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .gcard h3{margin:0 0 8px;font-size:13px;color:var(--accent2)}
+  .bar{height:7px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:3px}
+  .bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent))}
+  .matches{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .match{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .match .top{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:8px}
+  .match .row{display:flex;justify-content:space-between;font-size:14px;padding:2px 0}
+  .live{color:var(--accent);font-weight:700}
+  .pill{font-size:10px;padding:1px 7px;border-radius:20px;border:1px solid var(--line)}
+  .muted{color:var(--muted)}
+  /* win probability bar */
+  .wp{display:flex;height:9px;border-radius:6px;overflow:hidden;margin-top:9px}
+  .wp .h{background:var(--accent)} .wp .d{background:#586087} .wp .a{background:var(--accent2)}
+  .wplab{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px}
+  /* title odds */
+  .champcell{position:relative}
+  .champcell .b{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgba(255,212,91,.35),rgba(255,212,91,.08));border-radius:4px}
+  .champcell span{position:relative;font-weight:700;color:var(--gold)}
+  /* barra de controle da simulação */
+  .simbar{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    background:linear-gradient(90deg,#16213f,#141a2e);border:1px solid var(--line);
+    border-radius:14px;padding:14px 18px;margin-bottom:18px;flex-wrap:wrap}
+  .simbar .phase{font-size:13px;color:var(--muted)}
+  .simbar .phase b{color:var(--accent);font-size:15px}
+  .simbar .prog{font-size:11px;color:var(--muted);margin-left:6px}
+  .btn{background:var(--accent);color:#06281c;border:none;border-radius:10px;
+    padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .btn.busy{cursor:wait}
+  /* bracket / mata-mata */
+  .bracket{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px}
+  .bround{min-width:205px;flex:0 0 auto}
+  .bround h4{margin:0 0 8px;font-size:12px;color:var(--accent2);text-transform:uppercase;letter-spacing:.5px}
+  .btie{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12.5px}
+  .btie .r{display:flex;justify-content:space-between;padding:1px 0}
+  .btie .win{color:var(--accent);font-weight:700}
+  .btie .pen{display:block;font-size:10px;color:var(--warn);margin-top:3px}
+  footer{padding:18px 26px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚽ Copa do Mundo <span>2026</span> · Estatísticas & Analytics</h1>
+  <div class="badges">
+    <span id="srcBadge" class="pill">fonte: —</span>
+    <span><span id="wsDot" class="dot off"></span><span id="wsTxt">conectando…</span></span>
+    <span id="clock"></span>
+  </div>
+</header>
+
+<main>
+  <section class="simbar" id="simbar" style="display:none">
+    <div class="phase">Próxima rodada: <b id="phaseNext">…</b>
+      <span class="prog" id="phaseProg"></span></div>
+    <div style="display:flex;gap:10px">
+      <button id="btnNext" class="btn">▶ Simular próxima rodada</button>
+      <button id="btnReset" class="btn ghost">↺ Reiniciar torneio</button>
+    </div>
+  </section>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="card col-6"><h2>Artilheiros</h2><canvas id="scorersChart"></canvas></div>
+    <div class="card col-6">
+      <h2>Feed ao vivo</h2><div class="feed"><ul id="feed"></ul></div>
+    </div>
+
+    <div class="card col-6"><h2>Posse de bola média (%)</h2><canvas id="possChart"></canvas></div>
+    <div class="card col-6"><h2>Média de gols marcados por jogo</h2><canvas id="goalsChart"></canvas></div>
+
+    <div class="card col-6"><h2>Gols por intervalo de tempo</h2><canvas id="timingChart"></canvas></div>
+    <div class="card col-6">
+      <h2>Fair-play · disciplina (amarelo=1, vermelho=3)</h2>
+      <div style="max-height:300px;overflow:auto">
+        <table id="fairTable"><thead><tr>
+          <th class="name">Seleção</th><th>🟨</th><th>🟥</th><th>Pontos FP</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card col-12">
+      <h2>🏆 Probabilidade de título · Monte Carlo (<span id="mcRuns2">—</span> cenários, mata-mata completo)</h2>
+      <div style="overflow:auto">
+        <table id="titleTable"><thead><tr>
+          <th class="name">Seleção</th><th>Grupo</th><th>Oitavas</th><th>Quartas</th>
+          <th>Semi</th><th>Final</th><th>Campeão</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card col-12">
+      <h2>👟 Corrida pela Chuteira de Ouro
+        <span class="muted" style="font-size:11px">· gols atuais + projeção e probabilidade de terminar artilheiro</span></h2>
+      <div style="overflow:auto">
+        <table id="bootTable"><thead><tr>
+          <th>#</th><th class="name">Jogador</th><th>Seleção</th><th>Gols</th>
+          <th>Pên.</th><th>Assist.</th><th>Proj. final</th><th>Prob. 👟</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card col-12">
+      <h2>Probabilidade de classificação por grupo (<span id="mcRuns">—</span> cenários)</h2>
+      <div class="groups" id="probGroups"></div>
+    </div>
+
+    <div class="card col-8">
+      <h2>Jogos <span class="muted" style="font-size:11px">· barra = prob. de vitória ao vivo</span></h2>
+      <div class="matches" id="matches"></div>
+    </div>
+    <div class="card col-4">
+      <h2>Estatísticas por seleção</h2>
+      <div style="max-height:380px;overflow:auto">
+        <table id="teamTable"><thead><tr>
+          <th class="name">Seleção</th><th>Posse</th><th>Fin.</th>
+          <th>Conv.</th><th>CS</th><th>Méd.G</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card col-12" id="bracketCard" style="display:none">
+      <h2>🏟️ Mata-mata</h2>
+      <div class="bracket" id="bracket"></div>
+    </div>
+
+    <div class="card col-12">
+      <h2>Classificação dos grupos</h2>
+      <div class="groups" id="standings"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Pipeline: API-Football / Simulador → <b>Kafka</b> → Event Store (Event Sourcing) →
+  Projeções assíncronas → FastAPI. Dados do simulador são ilustrativos.
+</footer>
+
+<script>
+const $ = (s)=>document.querySelector(s);
+const fmt = (n,d=0)=>Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+let charts = {};
+
+Chart.defaults.color = '#93a0c0';
+Chart.defaults.borderColor = '#27304f';
+Chart.defaults.font.family = 'Segoe UI, system-ui, sans-serif';
+
+function barChart(id, horizontal=true, color='#5b8cff'){
+  return new Chart($('#'+id), {
+    type:'bar',
+    data:{labels:[],datasets:[{data:[],backgroundColor:color,borderRadius:5}]},
+    options:{indexAxis: horizontal?'y':'x',
+      plugins:{legend:{display:false}},
+      scales:{x:{grid:{color:'#1b2340'}},y:{grid:{display:false}}},
+      maintainAspectRatio:false, responsive:true}
+  });
+}
+async function getJSON(u){ const r = await fetch(u); return r.json(); }
+
+async function refreshAll(){
+  try{
+    const [summary, scorers, teams, standings, matches, prob, timing, fair, winp, boot, brk] =
+      await Promise.all([
+        getJSON('/api/summary'), getJSON('/api/scorers?limit=10'),
+        getJSON('/api/teams'), getJSON('/api/standings'),
+        getJSON('/api/matches'), getJSON('/api/probabilities'),
+        getJSON('/api/goal-timing'), getJSON('/api/fairplay'),
+        getJSON('/api/winprob'), getJSON('/api/golden-boot'),
+        getJSON('/api/bracket')
+      ]);
+    renderKpis(summary); renderScorers(scorers); renderPossession(teams);
+    renderGoals(teams); renderTeamTable(teams); renderStandings(standings);
+    renderTiming(timing); renderFair(fair); renderTitle(prob); renderBoot(boot);
+    renderBracket(brk);
+    const wpMap = {}; winp.forEach(w=>wpMap[w.match_id]=w);
+    renderMatches(matches, wpMap); renderProb(prob);
+    $('#srcBadge').textContent = 'fonte: ' + (summary.source||'—');
+  }catch(e){ console.error('refresh falhou', e); }
+}
+
+function renderKpis(s){
+  const top = s.top_scorer ? `${s.top_scorer.player} (${s.top_scorer.goals})` : '—';
+  const items = [
+    ['Gols no torneio', fmt(s.total_goals), 'em '+s.matches_finished+' jogos'],
+    ['Média de gols/jogo', fmt(s.avg_goals_per_match,2), 'finalizados'],
+    ['Ao vivo', s.matches_live, 'partidas agora'],
+    ['Agendados', s.matches_scheduled, 'a disputar'],
+    ['Artilheiro', top, s.top_scorer?s.top_scorer.team:'—'],
+  ];
+  $('#kpis').innerHTML = items.map(([l,v,sub])=>
+    `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${sub}</div></div>`
+  ).join('');
+}
+
+function renderScorers(rows){
+  if(!charts.scorers) charts.scorers = barChart('scorersChart', true, '#36d399');
+  charts.scorers.data.labels = rows.map(r=>r.player);
+  charts.scorers.data.datasets[0].data = rows.map(r=>r.goals);
+  charts.scorers.update();
+}
+function renderPossession(teams){
+  const top = [...teams].filter(t=>t.avg_possession>0)
+      .sort((a,b)=>b.avg_possession-a.avg_possession).slice(0,12);
+  if(!charts.poss) charts.poss = barChart('possChart', false, '#5b8cff');
+  charts.poss.data.labels = top.map(t=>t.team);
+  charts.poss.data.datasets[0].data = top.map(t=>t.avg_possession);
+  charts.poss.update();
+}
+function renderGoals(teams){
+  const top = [...teams].filter(t=>t.played>0)
+      .sort((a,b)=>b.avg_goals_for-a.avg_goals_for).slice(0,12);
+  if(!charts.goals) charts.goals = barChart('goalsChart', false, '#fbbd23');
+  charts.goals.data.labels = top.map(t=>t.team);
+  charts.goals.data.datasets[0].data = top.map(t=>t.avg_goals_for);
+  charts.goals.update();
+}
+function renderTiming(rows){
+  if(!charts.timing) charts.timing = barChart('timingChart', false, '#a78bfa');
+  charts.timing.data.labels = rows.map(r=>r.bucket);
+  charts.timing.data.datasets[0].data = rows.map(r=>r.goals);
+  charts.timing.update();
+}
+function renderFair(rows){
+  $('#fairTable tbody').innerHTML = rows.slice(0,16).map(r=>
+    `<tr><td class="name">${r.team} <span class="muted">${r.grp||''}</span></td>
+     <td>${r.yellow}</td><td>${r.red}</td><td><b>${r.fair_play_points}</b></td></tr>`).join('');
+}
+function renderTeamTable(teams){
+  $('#teamTable tbody').innerHTML = [...teams].sort((a,b)=>b.points-a.points).slice(0,24).map(t=>
+    `<tr><td class="name">${t.team} <span class="muted">${t.grp||''}</span></td>
+     <td>${fmt(t.avg_possession,1)}%</td><td>${t.shots}</td>
+     <td>${fmt(t.shot_conversion,0)}%</td><td>${t.clean_sheets}</td>
+     <td>${fmt(t.avg_goals_for,2)}</td></tr>`).join('');
+}
+function renderStandings(groups){
+  $('#standings').innerHTML = Object.keys(groups).sort().map(g=>{
+    const rows = groups[g].map((t,i)=>
+      `<tr style="color:${i<2?'var(--accent)':(i===2?'var(--warn)':'var(--muted)')}">
+        <td>${i+1}</td><td class="name">${t.team}</td><td>${t.played}</td>
+        <td>${t.won}-${t.drawn}-${t.lost}</td><td>${t.gd>0?'+':''}${t.gd}</td>
+        <td><b>${t.points}</b></td></tr>`).join('');
+    return `<div class="gcard"><h3>Grupo ${g}</h3><table>
+      <thead><tr><th>#</th><th class="name">Seleção</th><th>J</th><th>V-E-D</th><th>SG</th><th>P</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }).join('');
+}
+function renderProb(p){
+  $('#mcRuns').textContent = (p.runs||0).toLocaleString('pt-BR');
+  const groups = p.groups||{};
+  $('#probGroups').innerHTML = Object.keys(groups).sort().map(g=>{
+    const rows = groups[g].map(t=>{
+      const col = t.p_advance>=66?'var(--accent)':t.p_advance>=33?'var(--warn)':'var(--danger)';
+      return `<tr><td class="name">${t.team}</td>
+        <td style="width:55%"><div class="bar"><span style="width:${t.p_advance}%;background:${col}"></span></div></td>
+        <td style="width:60px"><b>${fmt(t.p_advance,1)}%</b></td></tr>`;
+    }).join('');
+    return `<div class="gcard"><h3>Grupo ${g}</h3><table><tbody>${rows}</tbody></table></div>`;
+  }).join('') || '<p class="muted">Sem dados suficientes ainda.</p>';
+}
+function renderTitle(p){
+  $('#mcRuns2').textContent = (p.runs||0).toLocaleString('pt-BR');
+  const title = p.title||[];
+  if(!title.length){ $('#titleTable tbody').innerHTML =
+    '<tr><td class="name muted" colspan="7">Aguardando os 32 classificados para simular o mata-mata…</td></tr>'; return; }
+  const max = Math.max(...title.map(t=>t.p_champion), 1);
+  $('#titleTable tbody').innerHTML = title.map(t=>
+    `<tr><td class="name">${t.team}</td><td>${t.grp}</td>
+     <td>${fmt(t.p_r16,1)}%</td><td>${fmt(t.p_qf,1)}%</td>
+     <td>${fmt(t.p_sf,1)}%</td><td>${fmt(t.p_final,1)}%</td>
+     <td class="champcell"><div class="b" style="width:${100*t.p_champion/max}%"></div>
+        <span>${fmt(t.p_champion,1)}%</span></td></tr>`).join('');
+}
+function renderBoot(b){
+  const c = b.contenders||[];
+  if(!c.length){ $('#bootTable tbody').innerHTML =
+    '<tr><td class="name muted" colspan="8">Sem gols ainda.</td></tr>'; return; }
+  const maxp = Math.max(...c.map(r=>r.p_golden_boot), 1);
+  $('#bootTable tbody').innerHTML = c.slice(0,15).map((r,i)=>
+    `<tr><td>${i+1}</td><td class="name">${r.player}</td><td>${r.team}</td>
+     <td><b>${r.goals}</b></td><td>${r.penalties}</td><td>${r.assists}</td>
+     <td>${fmt(r.proj_final_goals,1)}</td>
+     <td class="champcell"><div class="b" style="width:${100*r.p_golden_boot/maxp}%"></div>
+        <span>${fmt(r.p_golden_boot,1)}%</span></td></tr>`).join('');
+}
+function renderBracket(rounds){
+  const card = $('#bracketCard');
+  if(!rounds || !rounds.length){ card.style.display='none'; return; }
+  card.style.display='';
+  $('#bracket').innerHTML = rounds.map(r=>{
+    const ties = r.matches.map(m=>{
+      const fin = m.status==='finished';
+      const winH = m.winner && m.winner===m.home, winA = m.winner && m.winner===m.away;
+      const pens = (m.pen_home!=null)?`<span class="pen">pênaltis ${m.pen_home}–${m.pen_away}</span>`:'';
+      return `<div class="btie">
+        <div class="r"><span class="${winH?'win':''}">${m.home}</span><b>${fin?m.home_score:'·'}</b></div>
+        <div class="r"><span class="${winA?'win':''}">${m.away}</span><b>${fin?m.away_score:'·'}</b></div>
+        ${pens}</div>`;
+    }).join('');
+    return `<div class="bround"><h4>${r.label}</h4>${ties}</div>`;
+  }).join('');
+}
+function renderMatches(rows, wpMap){
+  $('#matches').innerHTML = rows.slice(0,24).map(m=>{
+    const live = m.status==='live';
+    const badge = live?`<span class="live">${m.minute}'</span>`
+                : m.status==='finished'?`<span class="pill">FT</span>`
+                : `<span class="pill">${m.grp?('Grupo '+m.grp):'—'}</span>`;
+    let wp='';
+    const w = wpMap[m.match_id];
+    if(live && w){
+      wp = `<div class="wp"><div class="h" style="width:${w.p_home}%"></div>
+              <div class="d" style="width:${w.p_draw}%"></div>
+              <div class="a" style="width:${w.p_away}%"></div></div>
+            <div class="wplab"><span>${fmt(w.p_home,0)}%</span>
+              <span>X ${fmt(w.p_draw,0)}%</span><span>${fmt(w.p_away,0)}%</span></div>`;
+    }
+    return `<div class="match">
+      <div class="top"><span>${m.grp?('Grupo '+m.grp):(m.stage||'')}</span>${badge}</div>
+      <div class="row"><span>${m.home}</span><b>${m.home_score}</b></div>
+      <div class="row"><span>${m.away}</span><b>${m.away_score}</b></div>${wp}</div>`;
+  }).join('');
+}
+
+// --- WebSocket: feed ao vivo ---
+const feed = $('#feed');
+function pushFeed(ev){
+  const p = ev.payload||{};
+  let tag='', txt='';
+  if(ev.type==='GoalScored'){ tag='goal'; txt=`⚽ GOL · ${p.team} — ${p.player} (${p.minute}')`; }
+  else if(ev.type==='CardShown'){ tag='card'; txt=`${p.card==='red'?'🟥 Vermelho':'🟨 Amarelo'} · ${p.team} — ${p.player} (${p.minute}')`; }
+  else if(ev.type==='MatchFinished'){ tag='ft'; txt=`🏁 FIM · ${p.home} ${p.home_score} x ${p.away_score} ${p.away}`; }
+  else if(ev.type==='MatchStarted'){ tag='ft'; txt=`▶️ Início de partida`; }
+  else return;
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="tag ${tag}">${ev.type}</span><span>${txt}</span>`;
+  feed.prepend(li);
+  while(feed.children.length>40) feed.removeChild(feed.lastChild);
+}
+
+let refreshTimer=null;
+function connectWS(){
+  const proto = location.protocol==='https:'?'wss':'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = ()=>{ $('#wsDot').className='dot on'; $('#wsTxt').textContent='ao vivo'; };
+  ws.onclose= ()=>{ $('#wsDot').className='dot off'; $('#wsTxt').textContent='reconectando…'; setTimeout(connectWS,3000); };
+  ws.onmessage = (m)=>{
+    const ev = JSON.parse(m.data); pushFeed(ev);
+    if(['GoalScored','MatchFinished'].includes(ev.type)){
+      clearTimeout(refreshTimer); refreshTimer=setTimeout(refreshAll, 1200);
+    }
+  };
+}
+
+// --- Controle da simulação manual (botão por rodada) ---
+let simDone = false;
+function applySimState(s){
+  $('#simbar').style.display = '';
+  $('#phaseNext').textContent = s.next_label;
+  $('#phaseProg').textContent = `· ${s.rounds_played}/${s.rounds_total} rodadas`
+     + (s.champion ? ` · 🏆 Campeão: ${s.champion}` : '');
+  simDone = s.done;
+  const b = $('#btnNext');
+  b.disabled = s.done;
+  b.textContent = s.done ? '🏁 Torneio encerrado' : '▶ Simular: ' + s.next_label;
+}
+async function fetchSimState(){
+  try{
+    const s = await getJSON('/api/sim/state');
+    if(s.enabled) applySimState(s); else $('#simbar').style.display='none';
+  }catch(e){ console.error('sim/state', e); }
+}
+function doRefreshSoon(){ setTimeout(refreshAll, 700); setTimeout(refreshAll, 2000); }
+async function nextRound(){
+  const b = $('#btnNext'); if(b.disabled) return;
+  b.disabled = true; b.classList.add('busy'); b.textContent = '⏳ Simulando…';
+  try{
+    const res = await fetch('/api/sim/next-round', {method:'POST'}).then(r=>r.json());
+    if(res.error) alert(res.error);
+    if(res.state) applySimState(res.state);
+    doRefreshSoon();
+  }catch(e){ alert('Falha ao simular a rodada.'); console.error(e); }
+  finally{ b.classList.remove('busy'); if(!simDone) b.disabled = false; }
+}
+async function resetTournament(){
+  if(!confirm('Reiniciar o torneio? Todos os dados serão apagados e o sorteio recomeça.')) return;
+  const b = $('#btnReset'); b.disabled = true;
+  try{
+    const s = await fetch('/api/sim/reset', {method:'POST'}).then(r=>r.json());
+    if(s.enabled) applySimState(s);
+    feed.innerHTML = ''; doRefreshSoon();
+  }catch(e){ console.error('reset', e); }
+  finally{ b.disabled = false; }
+}
+$('#btnNext').addEventListener('click', nextRound);
+$('#btnReset').addEventListener('click', resetTournament);
+
+setInterval(()=>{ $('#clock').textContent = new Date().toLocaleTimeString('pt-BR'); }, 1000);
+refreshAll();
+fetchSimState();
+setInterval(refreshAll, 12000);
+connectWS();
+</script>
+</body>
+</html>

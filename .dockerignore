@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+pgdata
+.env
+*.md
+.gitignore
+docker-compose*.yml
+Caddyfile
+scripts

@@ -1,0 +1,9 @@
+# Proxy reverso + HTTPS automático (Let's Encrypt) para a API.
+#
+#  - Com um domínio real apontando para o servidor (DOMAIN=meusite.com),
+#    o Caddy emite e renova o certificado TLS sozinho.
+#  - Sem domínio (DOMAIN=:80), serve em HTTP puro pelo IP do servidor.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy api:8000
+}
