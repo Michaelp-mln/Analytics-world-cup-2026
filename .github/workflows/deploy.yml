@@ -40,7 +40,18 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Verifica se o VPS está configurado
+        id: cfg
+        run: |
+          if [ -n "${{ secrets.SSH_HOST }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Secrets SSH ausentes — deploy pulado. Configure SSH_HOST/SSH_USER/SSH_KEY quando tiver o VPS."
+          fi
+
       - name: Deploy via SSH
+        if: steps.cfg.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
